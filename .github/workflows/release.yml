@@ -1,0 +1,48 @@
+name: Publier la release
+
+# Crée (ou met à jour) la release GitHub avec MagicCard.exe.
+# La version est lue dans le message du commit : « Magic Card vX.Y.Z ».
+# Un commit sans version dans son titre ne publie rien.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lire la version
+        id: v
+        run: |
+          TAG=$(git log -1 --format=%s | grep -oE 'v[0-9]+(\.[0-9]+)*' | head -1 || true)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if [ -z "$TAG" ]; then echo "Pas de version dans le titre du commit : rien à publier."; fi
+
+      - name: Créer ou mettre à jour la release
+        if: steps.v.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.v.outputs.tag }}
+        run: |
+          sha256sum MagicCard.exe > SHA256SUMS.txt
+          cat > notes.md <<'NOTES'
+          Télécharge **MagicCard.exe** et lance-le : aucun autre fichier n'est nécessaire.
+
+          Prérequis : Windows 10/11 (64 bits) et iTunes ou Apple Mobile Device Support pour que l'iPhone soit reconnu.
+
+          Licences : sudo-shop.xyz
+
+          © SCOOBY INC — Tous droits réservés.
+          NOTES
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" MagicCard.exe SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" MagicCard.exe SHA256SUMS.txt \
+              --title "Magic Card $TAG" --notes-file notes.md --target main --latest
+          fi
